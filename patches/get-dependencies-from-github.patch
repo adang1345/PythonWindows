@@ -1,0 +1,440 @@
+diff --git a/PCbuild/get_external.py b/PCbuild/get_external.py
+new file mode 100644
+--- /dev/null
++++ b/PCbuild/get_external.py
+@@ -0,0 +1,60 @@
++#!/usr/bin/env python3
++
++import argparse
++import os
++import pathlib
++import zipfile
++from urllib.request import urlretrieve
++
++
++def fetch_zip(commit_hash, zip_dir, *, org='python', binary=False, verbose):
++    repo = f'cpython-{"bin" if binary else "source"}-deps'
++    url = f'https://github.com/{org}/{repo}/archive/{commit_hash}.zip'
++    reporthook = None
++    if verbose:
++        reporthook = print
++    zip_dir.mkdir(parents=True, exist_ok=True)
++    filename, headers = urlretrieve(
++        url,
++        zip_dir / f'{commit_hash}.zip',
++        reporthook=reporthook,
++    )
++    return filename
++
++
++def extract_zip(externals_dir, zip_path):
++    with zipfile.ZipFile(os.fspath(zip_path)) as zf:
++        zf.extractall(os.fspath(externals_dir))
++        return externals_dir / zf.namelist()[0].split('/')[0]
++
++
++def parse_args():
++    p = argparse.ArgumentParser()
++    p.add_argument('-v', '--verbose', action='store_true')
++    p.add_argument('-b', '--binary', action='store_true',
++                   help='Is the dependency in the binary repo?')
++    p.add_argument('-O', '--organization',
++                   help='Organization owning the deps repos', default='python')
++    p.add_argument('-e', '--externals-dir', type=pathlib.Path,
++                   help='Directory in which to store dependencies',
++                   default=pathlib.Path(__file__).parent.parent / 'externals')
++    p.add_argument('tag',
++                   help='tag of the dependency')
++    return p.parse_args()
++
++
++def main():
++    args = parse_args()
++    zip_path = fetch_zip(
++        args.tag,
++        args.externals_dir / 'zips',
++        org=args.organization,
++        binary=args.binary,
++        verbose=args.verbose,
++    )
++    final_name = args.externals_dir / args.tag
++    extract_zip(args.externals_dir, zip_path).replace(final_name)
++
++
++if __name__ == '__main__':
++    main()
+diff --git a/PCbuild/get_externals.bat b/PCbuild/get_externals.bat
+--- a/PCbuild/get_externals.bat
++++ b/PCbuild/get_externals.bat
+@@ -2,103 +2,131 @@
+ setlocal
+ rem Simple script to fetch source for external libraries
+ 
+-if not exist "%~dp0..\externals" mkdir "%~dp0..\externals"
+-pushd "%~dp0..\externals"
++if "%PCBUILD%"=="" (set PCBUILD=%~dp0)
++if "%EXTERNALS_DIR%"=="" (set EXTERNALS_DIR=%PCBUILD%\..\externals)
++if "%NUGET%"=="" (set NUGET=%EXTERNALS_DIR%\nuget.exe)
++if "%NUGET_URL%"=="" (set NUGET_URL=https://aka.ms/nugetclidl)
+ 
+-if "%SVNROOT%"=="" set SVNROOT=http://svn.python.org/projects/external/
++set DO_FETCH=true
++set DO_CLEAN=false
+ 
+-rem Optionally clean up first.  Be warned that this can be very destructive!
+-if not "%1"=="" (
+-    for %%c in (-c --clean --clean-only) do (
+-        if "%1"=="%%c" goto clean
+-    )
+-    goto usage
+-)
+-goto fetch
++:CheckOpts
++if "%~1"=="--no-tkinter" (set IncludeTkinter=false) & shift & goto CheckOpts
++if "%~1"=="--no-openssl" (set IncludeSSL=false) & shift & goto CheckOpts
++if "%~1"=="--python" (set PYTHON_FOR_BUILD=%2) & shift & shift & goto CheckOpts
++if "%~1"=="--organization" (set ORG=%2) & shift & shift & goto CheckOpts
++if "%~1"=="-c" (set DO_CLEAN=true) & shift & goto CheckOpts
++if "%~1"=="--clean" (set DO_CLEAN=true) & shift & goto CheckOpts
++if "%~1"=="--clean-only" (set DO_FETCH=false) & goto clean
++if "x%~1" NEQ "x" goto usage
+ 
++if "%DO_CLEAN%"=="false" goto fetch
+ :clean
+ echo.Cleaning up external libraries.
+-for /D %%d in (
+-               bzip2-*
+-               db-*
+-               nasm-*
+-               openssl-*
+-               tcl-*
+-               tcltk*
+-               tk-*
+-               tix-*
+-               sqlite-*
+-               xz-*
+-               ) do (
+-    echo.Removing %%d
+-    rmdir /s /q %%d
+-)
+-if "%1"=="--clean-only" (
+-    goto end
++if exist "%EXTERNALS_DIR%" (
++    rem Sometimes this fails the first time; try it twice
++    rmdir /s /q "%EXTERNALS_DIR%" || rmdir /s /q "%EXTERNALS_DIR%"
+ )
+ 
++if "%DO_FETCH%"=="false" goto end
+ :fetch
+-rem Fetch current versions
+-
+-svn --version > nul 2>&1
+-if ERRORLEVEL 9009 (
+-    echo.svn.exe must be on your PATH.
+-    echo.Try TortoiseSVN (http://tortoisesvn.net/^) and be sure to check the
+-    echo.command line tools option.
+-    popd
+-    exit /b 1
++
++if "%ORG%"=="" (set ORG=python)
++
++if "%PYTHON_FOR_BUILD%"=="" (
++    echo Checking for installed python...
++    py -3.6 -V >nul 2>&1 && (set PYTHON_FOR_BUILD=py -3.6)
++)
++if "%PYTHON_FOR_BUILD%"=="" (
++    if NOT exist "%EXTERNALS_DIR%" mkdir "%EXTERNALS_DIR%"
++    if NOT exist "%NUGET%" (
++        echo Downloading nuget...
++        rem NB: Must use single quotes around NUGET here, NOT double!
++        rem Otherwise, a space in the path would break things
++        powershell.exe -Command Invoke-WebRequest %NUGET_URL% -OutFile '%NUGET%'
++    )
++    echo Installing Python via nuget...
++    "%NUGET%" install pythonx86 -ExcludeVersion -OutputDirectory "%EXTERNALS_DIR%"
++    rem Quote it here; it's not quoted later because "py -3.6" wouldn't work
++    set PYTHON_FOR_BUILD="%EXTERNALS_DIR%\pythonx86\tools\python.exe"
+ )
+ 
+ echo.Fetching external libraries...
+ 
+ set libraries=
+ set libraries=%libraries%                                    bzip2-1.0.6
+-if NOT "%IncludeSSL%"=="false" set libraries=%libraries%     nasm-2.11.06
+ if NOT "%IncludeSSL%"=="false" set libraries=%libraries%     openssl-1.0.2k
++if NOT "%IncludeTkinter%"=="false" set libraries=%libraries% tix-8.4.3.6
++
++for %%e in (%libraries%) do (
++    if exist "%EXTERNALS_DIR%\%%e" (
++        echo.%%e already exists, skipping.
++    ) else (
++        echo.Fetching %%e...
++        %PYTHON_FOR_BUILD% "%PCBUILD%get_external.py" -O %ORG% %%e
++    )
++)
++
++set libraries=
+ set libraries=%libraries%                                    sqlite-3.8.11.0
+ if NOT "%IncludeTkinter%"=="false" set libraries=%libraries% tcl-core-8.6.4.2
+ if NOT "%IncludeTkinter%"=="false" set libraries=%libraries% tk-8.6.4.2
+-if NOT "%IncludeTkinter%"=="false" set libraries=%libraries% tix-8.4.3.6
+-set libraries=%libraries%                                    xz-5.0.5
+ 
+ for %%e in (%libraries%) do (
+-    if exist %%e (
++    if exist "%EXTERNALS_DIR%\%%e" (
+         echo.%%e already exists, skipping.
+     ) else (
+         echo.Fetching %%e...
+-        svn export -q %SVNROOT%%%e
++        %PYTHON_FOR_BUILD% "%PCBUILD%get_external.py" -O adang1345 %%e
+     )
+ )
+ 
++echo.Fetching external binaries...
++
++set binaries=
++set binaries=%binaries%
++if NOT "%IncludeSSL%"=="false" set binaries=%binaries%     nasm-2.11.06
++
++for %%b in (%binaries%) do (
++    if exist "%EXTERNALS_DIR%\%%b" (
++        echo.%%b already exists, skipping.
++    ) else (
++        echo.Fetching %%b...
++        %PYTHON_FOR_BUILD% "%PCBUILD%get_external.py" -b -O %ORG% %%b
++    )
++)
++
++set binaries=
++set binaries=%binaries%                                    xz-5.0.5
++
++for %%b in (%binaries%) do (
++    if exist "%EXTERNALS_DIR%\%%b" (
++        echo.%%b already exists, skipping.
++    ) else (
++        echo.Fetching %%b...
++        %PYTHON_FOR_BUILD% "%PCBUILD%get_external.py" -b -O adang1345 %%b
++    )
++)
++
++echo Finished.
+ goto end
+ 
+ :usage
+-echo.invalid argument: %1
+-echo.usage: %~n0 [[ -c ^| --clean ] ^| --clean-only ]
++echo.Valid options: -c, --clean, --clean-only, --organization, --python,
++echo.--no-tkinter, --no-openssl
+ echo.
+-echo.Pull all sources necessary for compiling optional extension modules
+-echo.that rely on external libraries.  Requires svn.exe to be on your PATH
+-echo.and pulls sources from %SVNROOT%.
++echo.Pull all sources and binaries necessary for compiling optional extension
++echo.modules that rely on external libraries.
+ echo.
+-echo.Use the -c or --clean option to clean up all external library sources
+-echo.before pulling in the current versions.
++echo.The --organization option determines which github organization to download
++echo.from, the --python option determines which Python 3.6+ interpreter to use
++echo.with PCbuild\get_external.py.
++echo.
++echo.Use the -c or --clean option to remove the entire externals directory.
+ echo.
+ echo.Use the --clean-only option to do the same cleaning, without pulling in
+ echo.anything new.
+ echo.
+-echo.Only the first argument is checked, all others are ignored.
+-echo.
+-echo.**WARNING**: the cleaning options unconditionally remove any directory
+-echo.that is a child of
+-echo.   %CD%
+-echo.and matches wildcard patterns beginning with bzip2-, db-, nasm-, openssl-,
+-echo.tcl-, tcltk, tk-, tix-, sqlite-, or xz-, and as such has the potential
+-echo.to be very destructive if you are not aware of what it is doing.  Use with
+-echo.caution!
+-popd
+ exit /b -1
+ 
+-
+ :end
+-echo Finished.
+-popd
+diff --git a/PCbuild/readme.txt b/PCbuild/readme.txt
+--- a/PCbuild/readme.txt
++++ b/PCbuild/readme.txt
+@@ -2,9 +2,11 @@ Quick Start Guide
+ -----------------
+ 
+ 1.  Install Microsoft Visual Studio 2015, any edition.
+-2.  Install Subversion, and make sure 'svn.exe' is on your PATH.
+-3.  Run "build.bat -e" to build Python in 32-bit Release configuration.
+-4.  (Optional, but recommended) Run the test suite with "rt.bat -q".
++1a. Optionally install Python 3.6 or later.  If not installed,
++    get_externals.bat (build.bat -e) will download and use Python via
++    NuGet.
++2.  Run "build.bat -e" to build Python in 32-bit Release configuration.
++3.  (Optional, but recommended) Run the test suite with "rt.bat -q".
+ 
+ 
+ Building Python using Microsoft Visual C++
+@@ -164,8 +166,7 @@ _bz2
+     Homepage:
+         http://www.bzip.org/
+ _lzma
+-    Python wrapper for the liblzma compression library, using pre-built
+-    binaries of XZ Utils version 5.0.5
++    Python wrapper for version 5.0.5 of the liblzma compression library
+     Homepage:
+         http://tukaani.org/xz/
+ _ssl
+@@ -236,9 +237,16 @@ order to download the relevant source files for each project before they
+ can be built.  However, a simple script is provided to make this as
+ painless as possible, called "get_externals.bat" and located in this
+ directory.  This script extracts all the external sub-projects from
+-    http://svn.python.org/projects/external
+-via Subversion (so you'll need svn.exe on your PATH) and places them
+-in ..\externals (relative to this directory).
++    https://github.com/python/cpython-source-deps
++and
++    https://github.com/python/cpython-bin-deps
++via a Python script called "get_external.py", located in this directory.
++If Python 3.6 or later is not available via the "py.exe" launcher, the
++path or command to use for Python can be provided in the PYTHON_FOR_BUILD
++environment variable, or get_externals.bat will download the latest
++version of NuGet and use it to download the latest "pythonx86" package
++for use with get_external.py.  Everything downloaded by these scripts is
++stored in ..\externals (relative to this directory).
+ 
+ It is also possible to download sources from each project's homepage,
+ though you may have to change folder names or pass the names to MSBuild
+diff --git a/Tools/msi/get_externals.bat b/Tools/msi/get_externals.bat
+--- a/Tools/msi/get_externals.bat
++++ b/Tools/msi/get_externals.bat
+@@ -1,27 +1,107 @@
+ @echo off
+ setlocal
+-rem Simple script to fetch source for external tools
+-
+-where /Q svn
+-if ERRORLEVEL 1 (
+-    echo.svn.exe must be on your PATH to get external tools.
+-    echo.Try TortoiseSVN (http://tortoisesvn.net/^) and be sure to check the
+-    echo.command line tools option.
+-    popd
+-    exit /b 1
++rem Simple script to fetch source for external libraries
++
++set HERE=%~dp0
++if "%PCBUILD%"=="" (set PCBUILD=%HERE%..\..\PCbuild\)
++if "%EXTERNALS_DIR%"=="" (set EXTERNALS_DIR=%HERE%..\..\externals\windows-installer)
++if "%NUGET%"=="" (set NUGET=%EXTERNALS_DIR%\..\nuget.exe)
++if "%NUGET_URL%"=="" (set NUGET_URL=https://aka.ms/nugetclidl)
++
++set DO_FETCH=true
++set DO_CLEAN=false
++
++:CheckOpts
++if "%~1"=="--python" (set PYTHON_FOR_BUILD=%2) & shift & shift & goto CheckOpts
++if "%~1"=="--organization" (set ORG=%2) & shift & shift & goto CheckOpts
++if "%~1"=="-c" (set DO_CLEAN=true) & shift & goto CheckOpts
++if "%~1"=="--clean" (set DO_CLEAN=true) & shift & goto CheckOpts
++if "%~1"=="--clean-only" (set DO_FETCH=false) & goto clean
++if "x%~1" NEQ "x" goto usage
++
++if "%DO_CLEAN%"=="false" goto fetch
++:clean
++echo.Cleaning up external libraries.
++if exist "%EXTERNALS_DIR%" (
++    rem Sometimes this fails the first time; try it twice
++    rmdir /s /q "%EXTERNALS_DIR%" || rmdir /s /q "%EXTERNALS_DIR%"
+ )
+ 
+-if not exist "%~dp0..\..\externals" mkdir "%~dp0..\..\externals"
+-pushd "%~dp0..\..\externals"
++if "%DO_FETCH%"=="false" goto end
++:fetch
+ 
+-if "%SVNROOT%"=="" set SVNROOT=http://svn.python.org/projects/external/
++if "%ORG%"=="" (set ORG=python)
+ 
+-if not exist "windows-installer\.svn" (
+-    echo.Checking out installer dependencies to %CD%\windows-installer
+-    svn co %SVNROOT%windows-installer
+-) else (
+-    echo.Updating installer dependencies in %CD%\windows-installer
+-    svn up windows-installer
++if "%PYTHON_FOR_BUILD%"=="" (
++    echo Checking for installed python...
++    py -3.6 -V >nul 2>&1 && (set PYTHON_FOR_BUILD=py -3.6)
+ )
++if "%PYTHON_FOR_BUILD%"=="" (
++    if NOT exist "%EXTERNALS_DIR%" mkdir "%EXTERNALS_DIR%"
++    if NOT exist "%NUGET%" (
++        echo Downloading nuget...
++        rem NB: Must use single quotes around NUGET here, NOT double!
++        rem Otherwise, a space in the path would break things
++        powershell.exe -Command Invoke-WebRequest %NUGET_URL% -OutFile '%NUGET%'
++    )
++    echo Installing Python via nuget...
++    "%NUGET%" install pythonx86 -ExcludeVersion -OutputDirectory "%EXTERNALS_DIR%"
++    rem Quote it here; it's not quoted later because "py -3.6" wouldn't work
++    set PYTHON_FOR_BUILD="%EXTERNALS_DIR%\pythonx86\tools\python.exe"
++)
++
++echo.Fetching external libraries...
++
++set libraries=
++
++for %%e in (%libraries%) do (
++    if exist "%EXTERNALS_DIR%\%%e" (
++        echo.%%e already exists, skipping.
++    ) else (
++        echo.Fetching %%e...
++        %PYTHON_FOR_BUILD% "%PCBUILD%get_external.py" -e "%EXTERNALS_DIR%" -O %ORG% %%e
++    )
++)
++
++echo.Fetching external tools...
++
++set binaries=
++rem We always use whatever's latest in the repo for these
++set binaries=%binaries%     binutils
++set binaries=%binaries%     gpg
++set binaries=%binaries%     htmlhelp
++set binaries=%binaries%     nuget
++set binaries=%binaries%     redist
++set binaries=%binaries%     wix
++
++for %%b in (%binaries%) do (
++    if exist "%EXTERNALS_DIR%\%%b" (
++        echo.%%b already exists, skipping.
++    ) else (
++        echo.Fetching %%b...
++        %PYTHON_FOR_BUILD% "%PCBUILD%get_external.py" -e "%EXTERNALS_DIR%" -b -O %ORG% %%b
++    )
++)
++
++echo Finished.
++goto end
++
++:usage
++echo.Valid options: -c, --clean, --clean-only, --organization, --python,
++echo.--no-tkinter, --no-openssl
++echo.
++echo.Pull all sources and binaries necessary for compiling optional extension
++echo.modules that rely on external libraries.
++echo.
++echo.The --organization option determines which github organization to download
++echo.from, the --python option determines which Python 3.6+ interpreter to use
++echo.with PCbuild\get_external.py.
++echo.
++echo.Use the -c or --clean option to remove the entire externals directory.
++echo.
++echo.Use the --clean-only option to do the same cleaning, without pulling in
++echo.anything new.
++echo.
++exit /b -1
+ 
+-popd
++:end

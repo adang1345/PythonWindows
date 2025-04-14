@@ -1,0 +1,181 @@
+diff --git a/PCbuild/pyproject.props b/PCbuild/pyproject.props
+--- a/PCbuild/pyproject.props
++++ b/PCbuild/pyproject.props
+@@ -159,4 +159,43 @@ foreach (System.Diagnostics.Process p in System.Diagnostics.Process.GetProcesses
+     <Error Text="Unable to locate signtool.exe. Set /p:SignToolPath and rebuild" Condition="'$(_SignCommand)' == ''" />
+     <Exec Command='$(_SignCommand) "$(TargetPath)" || $(_SignCommand) "$(TargetPath)" || $(_SignCommand) "$(TargetPath)"' ContinueOnError="false" />
+   </Target>
++
++
++  <Target Name="FindVCRedistDir">
++    <!-- Hard coded path for VS 2015 -->
++    <PropertyGroup Condition="$(PlatformToolset) == 'v140'">
++      <VCRedistDir>$(VCInstallDir)\redist\</VCRedistDir>
++    </PropertyGroup>
++
++    <!-- Search for version number in some broken Build Tools installs -->
++    <ItemGroup Condition="$(VCRedistDir) == '' and $(VCToolsRedistVersion) == ''">
++      <_RedistFiles Include="$(VCInstallDir)\Redist\MSVC\*\*.*" />
++    </ItemGroup>
++    <PropertyGroup Condition="$(VCRedistDir) == '' and $(VCToolsRedistVersion) == ''">
++      <_RedistDir>%(_RedistFiles.Directory)</_RedistDir>
++      <VCToolsRedistVersion>$([System.IO.Path]::GetFileName($(_RedistDir.Trim(`\`))))</VCToolsRedistVersion>
++    </PropertyGroup>
++
++    <!-- Use correct path for VS 2017 and later -->
++    <PropertyGroup Condition="$(VCRedistDir) == ''">
++      <VCRedistDir>$(VCInstallDir)\Redist\MSVC\$(VCToolsRedistVersion)\</VCRedistDir>
++    </PropertyGroup>
++
++    <PropertyGroup>
++      <VCRedistDir Condition="$(Platform) == 'Win32'">$(VCRedistDir)x86\</VCRedistDir>
++      <VCRedistDir Condition="$(Platform) != 'Win32'">$(VCRedistDir)$(Platform)\</VCRedistDir>
++    </PropertyGroup>
++
++    <Message Text="VC Redist Directory: $(VCRedistDir)" />
++    <Message Text="VC Redist Version: $(VCToolsRedistVersion)" />
++  </Target>
++
++  <Target Name="FindVCRuntime" Returns="VCRuntimeDLL" DependsOnTargets="FindVCRedistDir">
++    <ItemGroup Condition="$(VCInstallDir) != ''">
++      <VCRuntimeDLL Include="$(VCRedistDir)\Microsoft.VC*.CRT\vcruntime140.dll" />
++    </ItemGroup>
++
++    <Warning Text="vcruntime*.dll not found under $(VCRedistDir)." Condition="@(VCRuntimeDLL) == ''" />
++    <Message Text="VC Runtime DLL(s):%0A- @(VCRuntimeDLL,'%0A- ')" />
++  </Target>
+ </Project>
+\ No newline at end of file
+diff --git a/PCbuild/python.props b/PCbuild/python.props
+--- a/PCbuild/python.props
++++ b/PCbuild/python.props
+@@ -10,6 +10,7 @@
+ 
+     We set BasePlatformToolset for ICC's benefit, it's otherwise ignored.
+     -->
++    <BasePlatformToolset Condition="'$(BasePlatformToolset)' == '' and '$(VisualStudioVersion)' == '17.0'">v143</BasePlatformToolset>
+     <BasePlatformToolset Condition="'$(BasePlatformToolset)' == '' and '$(VCTargetsPath14)' != ''">v140</BasePlatformToolset>
+     <BasePlatformToolset Condition="'$(BasePlatformToolset)' == '' and '$(VCTargetsPath12)' != ''">v120</BasePlatformToolset>
+     <BasePlatformToolset Condition="'$(BasePlatformToolset)' == '' and '$(VCTargetsPath11)' != ''">v110</BasePlatformToolset>
+diff --git a/PCbuild/pythoncore.vcxproj b/PCbuild/pythoncore.vcxproj
+--- a/PCbuild/pythoncore.vcxproj
++++ b/PCbuild/pythoncore.vcxproj
+@@ -421,7 +421,16 @@
+       </ClCompile>
+     </ItemGroup>
+   </Target>
+-  <Target Name="_WarnAboutToolset" BeforeTargets="PrepareForBuild" Condition="$(PlatformToolset) != 'v140'">
++  <Target Name="_WarnAboutToolset" BeforeTargets="PrepareForBuild" Condition="$(PlatformToolset) != 'v140' and $(PlatformToolset) != 'v143'">
+     <Warning Text="Toolset $(PlatformToolset) is not used for official builds. Your build may have errors or incompatibilities." />
+   </Target>
++
++  <Target Name="_CopyVCRuntime" AfterTargets="Build" Inputs="@(VCRuntimeDLL)" Outputs="$(OutDir)%(Filename)%(Extension)" DependsOnTargets="FindVCRuntime">
++    <!-- bpo-38597: When we switch to another VCRuntime DLL, include vcruntime140.dll as well -->
++    <Warning Text="A copy of vcruntime140.dll is also required" Condition="!$(VCToolsRedistVersion.StartsWith(`14.`))" />
++    <Copy SourceFiles="%(VCRuntimeDLL.FullPath)" DestinationFolder="$(OutDir)" />
++  </Target>
++  <Target Name="_CleanVCRuntime" AfterTargets="Clean">
++    <Delete Files="@(VCRuntimeDLL->'$(OutDir)%(Filename)%(Extension)')" />
++  </Target>
+ </Project>
+\ No newline at end of file
+diff --git a/PCbuild/tcl.vcxproj b/PCbuild/tcl.vcxproj
+--- a/PCbuild/tcl.vcxproj
++++ b/PCbuild/tcl.vcxproj
+@@ -46,6 +46,7 @@
+     <ConfigurationType>Makefile</ConfigurationType>
+     <OutDir>$(tcltkDir)</OutDir>
+     <TargetPath>$(OutDir)bin\$(tclDLLName)</TargetPath>
++    <WindowsTargetPlatformVersion>10.0.15063.0</WindowsTargetPlatformVersion>
+   </PropertyGroup>
+   
+   <ItemGroup>
+diff --git a/PCbuild/tcltk.props b/PCbuild/tcltk.props
+--- a/PCbuild/tcltk.props
++++ b/PCbuild/tcltk.props
+@@ -37,7 +37,7 @@
+     <BuildDirTop>Release</BuildDirTop>
+     <BuildDirTop Condition="$(Configuration) == 'Debug'">Debug</BuildDirTop>
+     <BuildDirTop Condition="$(TclMachine) != 'IX86'">$(BuildDirTop)_$(TclMachine)</BuildDirTop>
+-    <BuildDirTop Condition="$(PlatformToolset) == 'v140'">$(BuildDirTop)_VC13</BuildDirTop>
++    <BuildDirTop Condition="$(PlatformToolset.StartsWith(`v14`))">$(BuildDirTop)_VC13</BuildDirTop>
+     <BuildDirTop Condition="$(PlatformToolset) == 'v120'">$(BuildDirTop)_VC12</BuildDirTop>
+     <BuildDirTop Condition="$(PlatformToolset) == 'v110'">$(BuildDirTop)_VC11</BuildDirTop>
+     <BuildDirTop Condition="$(PlatformToolset) == 'v100'">$(BuildDirTop)_VC10</BuildDirTop>
+diff --git a/PCbuild/tix.vcxproj b/PCbuild/tix.vcxproj
+--- a/PCbuild/tix.vcxproj
++++ b/PCbuild/tix.vcxproj
+@@ -47,6 +47,7 @@
+     <ConfigurationType>Makefile</ConfigurationType>
+     <OutDir>$(tcltkDir)</OutDir>
+     <TargetPath>$(tixDLLPath)</TargetPath>
++    <WindowsTargetPlatformVersion>10.0.15063.0</WindowsTargetPlatformVersion>
+   </PropertyGroup>
+   
+   <ItemGroup>
+diff --git a/PCbuild/tk.vcxproj b/PCbuild/tk.vcxproj
+--- a/PCbuild/tk.vcxproj
++++ b/PCbuild/tk.vcxproj
+@@ -47,6 +47,7 @@
+     <ConfigurationType>Makefile</ConfigurationType>
+     <OutDir>$(tcltkDir)</OutDir>
+     <TargetPath>$(OutDir)bin\$(tkDLLName)</TargetPath>
++    <WindowsTargetPlatformVersion>10.0.15063.0</WindowsTargetPlatformVersion>
+   </PropertyGroup>
+   
+   <ItemGroup>
+diff --git a/Tools/msi/bundle/bootstrap/pythonba.vcxproj b/Tools/msi/bundle/bootstrap/pythonba.vcxproj
+--- a/Tools/msi/bundle/bootstrap/pythonba.vcxproj
++++ b/Tools/msi/bundle/bootstrap/pythonba.vcxproj
+@@ -21,6 +21,7 @@
+   <PropertyGroup Label="Globals">
+     <Configuration Condition="'$(Configuration)' == ''">Release</Configuration>
+     <Platform Condition="'$(Platform)' == ''">Win32</Platform>
++    <PlatformToolset Condition="'$(PlatformToolset)' == '' and '$(VisualStudioVersion)' == '17.0'">v143</PlatformToolset>
+     <PlatformToolset Condition="'$(PlatformToolset)' == '' and '$(VCTargetsPath14)' != ''">v140</PlatformToolset>
+     <PlatformToolset Condition="'$(PlatformToolset)' == '' and '$(VCTargetsPath12)' != ''">v120</PlatformToolset>
+     <ProjectGuid>{7A09B132-B3EE-499B-A700-A4B2157FEA3D}</ProjectGuid>
+@@ -45,6 +46,7 @@
+     </ClCompile>
+     <Link>
+       <AdditionalDependencies>comctl32.lib;gdiplus.lib;msimg32.lib;shlwapi.lib;wininet.lib;dutil.lib;balutil.lib;version.lib;uxtheme.lib;%(AdditionalDependencies)</AdditionalDependencies>
++      <AdditionalLibraryDirectories Condition="$(PlatformToolset.StartsWith(`v14`))">$(WixInstallPath)sdk\vs2017\lib\x86</AdditionalLibraryDirectories>
+       <AdditionalLibraryDirectories Condition="'$(PlatformToolset)' == 'v140'">$(WixInstallPath)sdk\vs2015\lib\x86</AdditionalLibraryDirectories>
+       <AdditionalLibraryDirectories Condition="'$(PlatformToolset)' == 'v120'">$(WixInstallPath)sdk\vs2013\lib\x86</AdditionalLibraryDirectories>
+       <ModuleDefinitionFile>pythonba.def</ModuleDefinitionFile>
+diff --git a/Tools/msi/exe/exe_files.wxs b/Tools/msi/exe/exe_files.wxs
+--- a/Tools/msi/exe/exe_files.wxs
++++ b/Tools/msi/exe/exe_files.wxs
+@@ -30,7 +30,7 @@
+                 <File Name="pythonw.exe" KeyPath="yes" />
+             </Component>
+             <Component Id="vcruntime140.dll" Directory="InstallDirectory" Guid="*">
+-                <File Name="vcruntime140.dll" Source="!(bindpath.redist)vcruntime140.dll" KeyPath="yes" />
++                <File Name="vcruntime140.dll" Source="vcruntime140.dll" KeyPath="yes" />
+             </Component>
+         </ComponentGroup>
+     </Fragment>
+diff --git a/Tools/msi/make_zip.proj b/Tools/msi/make_zip.proj
+--- a/Tools/msi/make_zip.proj
++++ b/Tools/msi/make_zip.proj
+@@ -18,7 +18,7 @@
+         <Arguments>"$(PythonExe)" "$(MSBuildThisFileDirectory)\make_zip.py"</Arguments>
+         <Arguments>$(Arguments) -e -o "$(TargetPath)" -t "$(IntermediateOutputPath)\zip_$(ArchName)" -b "$(BuildPath.TrimEnd('\'))"</Arguments>
+         <Environment>set DOC_FILENAME=python$(PythonVersion).chm</Environment>
+-        <Environment Condition="Exists($(CRTRedist))">$(Environment)%0D%0Aset VCREDIST_PATH=$(CRTRedist)\$(Platform)</Environment>
++        <Environment>$(Environment)%0D%0Aset VCREDIST_PATH=$(BuildPath.TrimEnd('\'))</Environment>
+     </PropertyGroup>
+ 
+     <Target Name="_Build">
+diff --git a/Tools/nuget/make_pkg.proj b/Tools/nuget/make_pkg.proj
+--- a/Tools/nuget/make_pkg.proj
++++ b/Tools/nuget/make_pkg.proj
+@@ -35,7 +35,7 @@
+         <NugetArguments>$(NugetArguments) -NoPackageAnalysis -NonInteractive</NugetArguments>
+         
+         <Environment>set DOC_FILENAME=python$(PythonVersion).chm</Environment>
+-        <Environment Condition="Exists($(CRTRedist))">$(Environment)%0D%0Aset VCREDIST_PATH=$(CRTRedist)\$(Platform)</Environment>
++        <Environment>$(Environment)%0D%0Aset VCREDIST_PATH=$(BuildPath.TrimEnd('\'))</Environment>
+     </PropertyGroup>
+ 
+     <Target Name="_NugetMissing" BeforeTargets="_Build" Condition="!Exists($(Nuget))">
