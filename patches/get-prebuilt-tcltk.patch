@@ -1,0 +1,254 @@
+diff --git a/PCbuild/_tkinter.vcxproj b/PCbuild/_tkinter.vcxproj
+--- a/PCbuild/_tkinter.vcxproj
++++ b/PCbuild/_tkinter.vcxproj
+@@ -76,19 +76,23 @@
+   <ItemGroup>
+     <ResourceCompile Include="..\PC\python_nt.rc" />
+   </ItemGroup>
++  <ItemGroup>
++    <_TclTkDLL Include="$(tcltkdir)\bin\$(tclDllName)" />
++    <_TclTkDLL Include="$(tcltkdir)\bin\$(tkDllName)" />
++  </ItemGroup>
+   <ItemGroup>
+     <ProjectReference Include="pythoncore.vcxproj">
+       <Project>{cf7ac3d1-e2df-41d2-bea6-1e2556cdea26}</Project>
+       <ReferenceOutputAssembly>false</ReferenceOutputAssembly>
+     </ProjectReference>
+-    <ProjectReference Include="tcl.vcxproj">
+-      <Project>{b5fd6f1d-129e-4bff-9340-03606fac7283}</Project>
+-    </ProjectReference>
+-    <ProjectReference Include="tk.vcxproj">
+-      <Project>{7e85eccf-a72c-4da4-9e52-884508e80ba1}</Project>
+-    </ProjectReference>
+   </ItemGroup>
+   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
+   <ImportGroup Label="ExtensionTargets">
+   </ImportGroup>
++  <Target Name="_CopyTclTkDLL" Inputs="@(_TclTkDLL)" Outputs="@(_TclTkDLL->'$(OutDir)%(Filename)%(Extension)')" AfterTargets="Build">
++    <Copy SourceFiles="@(_TclTkDLL)" DestinationFolder="$(OutDir)" />
++  </Target>
++  <Target Name="_CleanTclTkDLL" BeforeTargets="Clean">
++    <Delete Files="@(_TclTkDLL->'$(OutDir)%(Filename)%(Extension)')" />
++  </Target>
+ </Project>
+\ No newline at end of file
+diff --git a/PCbuild/get_externals.bat b/PCbuild/get_externals.bat
+--- a/PCbuild/get_externals.bat
++++ b/PCbuild/get_externals.bat
+@@ -7,15 +7,21 @@ if "%EXTERNALS_DIR%"=="" (set EXTERNALS_DIR=%PCBUILD%\..\externals)
+ 
+ set DO_FETCH=true
+ set DO_CLEAN=false
++set IncludeTkinterSrc=false
+ 
+ :CheckOpts
+ if "%~1"=="--no-tkinter" (set IncludeTkinter=false) & shift & goto CheckOpts
+ if "%~1"=="--no-openssl" (set IncludeSSL=false) & shift & goto CheckOpts
++if "%~1"=="--tkinter-src" (set IncludeTkinterSrc=true) & shift & goto CheckOpts
+ if "%~1"=="--python" (set PYTHON=%2) & shift & shift & goto CheckOpts
+ if "%~1"=="--organization" (set ORG=%2) & shift & shift & goto CheckOpts
+ if "%~1"=="-c" (set DO_CLEAN=true) & shift & goto CheckOpts
+ if "%~1"=="--clean" (set DO_CLEAN=true) & shift & goto CheckOpts
+ if "%~1"=="--clean-only" (set DO_FETCH=false) & goto clean
++
++rem Include old options for compatibility
++if "%~1"=="--no-tkinter" shift & goto CheckOpts
++
+ if "x%~1" NEQ "x" goto usage
+ 
+ if "%DO_CLEAN%"=="false" goto fetch
+@@ -40,13 +46,13 @@ if "%PYTHON%"=="" (
+ echo.Fetching external libraries...
+ 
+ set libraries=
+-set libraries=%libraries%                                    bzip2-1.0.6
+-if NOT "%IncludeSSL%"=="false" set libraries=%libraries%     openssl-1.0.2q
+-set libraries=%libraries%                                    sqlite-3.21.0.0
+-if NOT "%IncludeTkinter%"=="false" set libraries=%libraries% tcl-core-8.6.6.0
+-if NOT "%IncludeTkinter%"=="false" set libraries=%libraries% tk-8.6.6.0
+-if NOT "%IncludeTkinter%"=="false" set libraries=%libraries% tix-8.4.3.6
+-set libraries=%libraries%                                    xz-5.2.2
++set libraries=%libraries%                                       bzip2-1.0.6
++if NOT "%IncludeSSL%"=="false" set libraries=%libraries%        openssl-1.0.2q
++set libraries=%libraries%                                       sqlite-3.21.0.0
++if NOT "%IncludeTkinterSrc%"=="false" set libraries=%libraries% tcl-core-8.6.6.0
++if NOT "%IncludeTkinterSrc%"=="false" set libraries=%libraries% tk-8.6.6.0
++if NOT "%IncludeTkinterSrc%"=="false" set libraries=%libraries% tix-8.4.3.6
++set libraries=%libraries%                                       xz-5.2.2
+ 
+ for %%e in (%libraries%) do (
+     if exist "%EXTERNALS_DIR%\%%e" (
+@@ -63,8 +69,8 @@ for %%e in (%libraries%) do (
+ echo.Fetching external binaries...
+ 
+ set binaries=
+-set binaries=%binaries%
+ if NOT "%IncludeSSL%"=="false" set binaries=%binaries%     nasm-2.11.06
++if NOT "%IncludeTkinter%"=="false" set binaries=%binaries% tcltk-8.6.6.0
+ 
+ for %%b in (%binaries%) do (
+     if exist "%EXTERNALS_DIR%\%%b" (
+diff --git a/PCbuild/pcbuild.proj b/PCbuild/pcbuild.proj
+--- a/PCbuild/pcbuild.proj
++++ b/PCbuild/pcbuild.proj
+@@ -55,7 +55,7 @@
+     <!-- _ssl will build _socket as well, which may cause conflicts in parallel builds -->
+     <ExtensionModules Include="_socket" Condition="!$(IncludeSSL) or !$(IncludeExternals)" />
+     <ExternalModules Include="_ssl;_hashlib" Condition="$(IncludeSSL)" />
+-    <ExternalModules Include="_tkinter;tix" Condition="$(IncludeTkinter)" />
++    <ExternalModules Include="_tkinter" Condition="$(IncludeTkinter)" />
+     <ExtensionModules Include="@(ExternalModules->'%(Identity)')" Condition="$(IncludeExternals)" />
+     <Projects Include="@(ExtensionModules->'%(Identity).vcxproj')" Condition="$(IncludeExtensions)" />
+     <!-- Test modules -->
+diff --git a/PCbuild/pcbuild.sln b/PCbuild/pcbuild.sln
+--- a/PCbuild/pcbuild.sln
++++ b/PCbuild/pcbuild.sln
+@@ -80,12 +80,6 @@ Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "_testembed", "_testembed.vc
+ EndProject
+ Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "_testmultiphase", "_testmultiphase.vcxproj", "{16BFE6F0-22EF-40B5-B831-7E937119EF10}"
+ EndProject
+-Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "tcl", "tcl.vcxproj", "{B5FD6F1D-129E-4BFF-9340-03606FAC7283}"
+-EndProject
+-Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "tix", "tix.vcxproj", "{C5A3E7FB-9695-4B2E-960B-1D9F43F1E555}"
+-EndProject
+-Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "tk", "tk.vcxproj", "{7E85ECCF-A72C-4DA4-9E52-884508E80BA1}"
+-EndProject
+ Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "libeay", "libeay.vcxproj", "{E5B04CC0-EB4C-42AB-B4DC-18EF95F864B0}"
+ EndProject
+ Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "ssleay", "ssleay.vcxproj", "{10615B24-73BF-4EFA-93AA-236916321317}"
+@@ -620,54 +614,6 @@ Global
+ 		{16BFE6F0-22EF-40B5-B831-7E937119EF10}.Release|Win32.Build.0 = Release|Win32
+ 		{16BFE6F0-22EF-40B5-B831-7E937119EF10}.Release|x64.ActiveCfg = Release|x64
+ 		{16BFE6F0-22EF-40B5-B831-7E937119EF10}.Release|x64.Build.0 = Release|x64
+-		{B5FD6F1D-129E-4BFF-9340-03606FAC7283}.Debug|Win32.ActiveCfg = Debug|Win32
+-		{B5FD6F1D-129E-4BFF-9340-03606FAC7283}.Debug|Win32.Build.0 = Debug|Win32
+-		{B5FD6F1D-129E-4BFF-9340-03606FAC7283}.Debug|x64.ActiveCfg = Debug|x64
+-		{B5FD6F1D-129E-4BFF-9340-03606FAC7283}.Debug|x64.Build.0 = Debug|x64
+-		{B5FD6F1D-129E-4BFF-9340-03606FAC7283}.PGInstrument|Win32.ActiveCfg = Release|Win32
+-		{B5FD6F1D-129E-4BFF-9340-03606FAC7283}.PGInstrument|Win32.Build.0 = Release|Win32
+-		{B5FD6F1D-129E-4BFF-9340-03606FAC7283}.PGInstrument|x64.ActiveCfg = Release|x64
+-		{B5FD6F1D-129E-4BFF-9340-03606FAC7283}.PGInstrument|x64.Build.0 = Release|x64
+-		{B5FD6F1D-129E-4BFF-9340-03606FAC7283}.PGUpdate|Win32.ActiveCfg = Release|Win32
+-		{B5FD6F1D-129E-4BFF-9340-03606FAC7283}.PGUpdate|Win32.Build.0 = Release|Win32
+-		{B5FD6F1D-129E-4BFF-9340-03606FAC7283}.PGUpdate|x64.ActiveCfg = Release|x64
+-		{B5FD6F1D-129E-4BFF-9340-03606FAC7283}.PGUpdate|x64.Build.0 = Release|x64
+-		{B5FD6F1D-129E-4BFF-9340-03606FAC7283}.Release|Win32.ActiveCfg = Release|Win32
+-		{B5FD6F1D-129E-4BFF-9340-03606FAC7283}.Release|Win32.Build.0 = Release|Win32
+-		{B5FD6F1D-129E-4BFF-9340-03606FAC7283}.Release|x64.ActiveCfg = Release|x64
+-		{B5FD6F1D-129E-4BFF-9340-03606FAC7283}.Release|x64.Build.0 = Release|x64
+-		{C5A3E7FB-9695-4B2E-960B-1D9F43F1E555}.Debug|Win32.ActiveCfg = Debug|Win32
+-		{C5A3E7FB-9695-4B2E-960B-1D9F43F1E555}.Debug|Win32.Build.0 = Debug|Win32
+-		{C5A3E7FB-9695-4B2E-960B-1D9F43F1E555}.Debug|x64.ActiveCfg = Debug|x64
+-		{C5A3E7FB-9695-4B2E-960B-1D9F43F1E555}.Debug|x64.Build.0 = Debug|x64
+-		{C5A3E7FB-9695-4B2E-960B-1D9F43F1E555}.PGInstrument|Win32.ActiveCfg = Release|Win32
+-		{C5A3E7FB-9695-4B2E-960B-1D9F43F1E555}.PGInstrument|Win32.Build.0 = Release|Win32
+-		{C5A3E7FB-9695-4B2E-960B-1D9F43F1E555}.PGInstrument|x64.ActiveCfg = Release|x64
+-		{C5A3E7FB-9695-4B2E-960B-1D9F43F1E555}.PGInstrument|x64.Build.0 = Release|x64
+-		{C5A3E7FB-9695-4B2E-960B-1D9F43F1E555}.PGUpdate|Win32.ActiveCfg = Release|Win32
+-		{C5A3E7FB-9695-4B2E-960B-1D9F43F1E555}.PGUpdate|Win32.Build.0 = Release|Win32
+-		{C5A3E7FB-9695-4B2E-960B-1D9F43F1E555}.PGUpdate|x64.ActiveCfg = Release|x64
+-		{C5A3E7FB-9695-4B2E-960B-1D9F43F1E555}.PGUpdate|x64.Build.0 = Release|x64
+-		{C5A3E7FB-9695-4B2E-960B-1D9F43F1E555}.Release|Win32.ActiveCfg = Release|Win32
+-		{C5A3E7FB-9695-4B2E-960B-1D9F43F1E555}.Release|Win32.Build.0 = Release|Win32
+-		{C5A3E7FB-9695-4B2E-960B-1D9F43F1E555}.Release|x64.ActiveCfg = Release|x64
+-		{C5A3E7FB-9695-4B2E-960B-1D9F43F1E555}.Release|x64.Build.0 = Release|x64
+-		{7E85ECCF-A72C-4DA4-9E52-884508E80BA1}.Debug|Win32.ActiveCfg = Debug|Win32
+-		{7E85ECCF-A72C-4DA4-9E52-884508E80BA1}.Debug|Win32.Build.0 = Debug|Win32
+-		{7E85ECCF-A72C-4DA4-9E52-884508E80BA1}.Debug|x64.ActiveCfg = Debug|x64
+-		{7E85ECCF-A72C-4DA4-9E52-884508E80BA1}.Debug|x64.Build.0 = Debug|x64
+-		{7E85ECCF-A72C-4DA4-9E52-884508E80BA1}.PGInstrument|Win32.ActiveCfg = Release|Win32
+-		{7E85ECCF-A72C-4DA4-9E52-884508E80BA1}.PGInstrument|Win32.Build.0 = Release|Win32
+-		{7E85ECCF-A72C-4DA4-9E52-884508E80BA1}.PGInstrument|x64.ActiveCfg = Release|x64
+-		{7E85ECCF-A72C-4DA4-9E52-884508E80BA1}.PGInstrument|x64.Build.0 = Release|x64
+-		{7E85ECCF-A72C-4DA4-9E52-884508E80BA1}.PGUpdate|Win32.ActiveCfg = Release|Win32
+-		{7E85ECCF-A72C-4DA4-9E52-884508E80BA1}.PGUpdate|Win32.Build.0 = Release|Win32
+-		{7E85ECCF-A72C-4DA4-9E52-884508E80BA1}.PGUpdate|x64.ActiveCfg = Release|x64
+-		{7E85ECCF-A72C-4DA4-9E52-884508E80BA1}.PGUpdate|x64.Build.0 = Release|x64
+-		{7E85ECCF-A72C-4DA4-9E52-884508E80BA1}.Release|Win32.ActiveCfg = Release|Win32
+-		{7E85ECCF-A72C-4DA4-9E52-884508E80BA1}.Release|Win32.Build.0 = Release|Win32
+-		{7E85ECCF-A72C-4DA4-9E52-884508E80BA1}.Release|x64.ActiveCfg = Release|x64
+-		{7E85ECCF-A72C-4DA4-9E52-884508E80BA1}.Release|x64.Build.0 = Release|x64
+ 		{E5B04CC0-EB4C-42AB-B4DC-18EF95F864B0}.Debug|Win32.ActiveCfg = Debug|Win32
+ 		{E5B04CC0-EB4C-42AB-B4DC-18EF95F864B0}.Debug|Win32.Build.0 = Debug|Win32
+ 		{E5B04CC0-EB4C-42AB-B4DC-18EF95F864B0}.Debug|x64.ActiveCfg = Debug|x64
+diff --git a/PCbuild/tcltk.props b/PCbuild/tcltk.props
+--- a/PCbuild/tcltk.props
++++ b/PCbuild/tcltk.props
+@@ -17,9 +17,8 @@
+     <tclDir>$(ExternalsDir)tcl-core-$(TclMajorVersion).$(TclMinorVersion).$(TclPatchLevel).$(TclRevision)\</tclDir>
+     <tkDir>$(ExternalsDir)tk-$(TkMajorVersion).$(TkMinorVersion).$(TkPatchLevel).$(TkRevision)\</tkDir>
+     <tixDir>$(ExternalsDir)tix-$(TixMajorVersion).$(TixMinorVersion).$(TixPatchLevel).$(TixRevision)\</tixDir>
+-    <tcltkDir>$(ExternalsDir)tcltk\</tcltkDir>
+-    <tcltkDir Condition="'$(Platform)' == 'x64'">$(ExternalsDir)tcltk64\</tcltkDir>
+-    <TclDebugExt Condition="'$(Configuration)' == 'Debug'">g</TclDebugExt>
++    <tcltkDir>$(ExternalsDir)tcltk-$(TclMajorVersion).$(TclMinorVersion).$(TclPatchLevel).$(TclRevision)\$(ArchName)\</tcltkDir>
++    <!--<TclDebugExt Condition="'$(Configuration)' == 'Debug'">g</TclDebugExt>-->
+     <tclDLLName>tcl$(TclMajorVersion)$(TclMinorVersion)t$(TclDebugExt).dll</tclDLLName>
+     <tclLibName>tcl$(TclMajorVersion)$(TclMinorVersion)t$(TclDebugExt).lib</tclLibName>
+     <tclShExeName>tclsh$(TclMajorVersion)$(TclMinorVersion)t$(TclDebugExt).exe</tclShExeName>
+diff --git a/Tools/msi/exe/exe.wixproj b/Tools/msi/exe/exe.wixproj
+--- a/Tools/msi/exe/exe.wixproj
++++ b/Tools/msi/exe/exe.wixproj
+@@ -27,9 +27,9 @@
+                                    crtlicense.txt;
+                                    $(bz2Dir)LICENSE;
+                                    $(opensslDir)LICENSE;
+-                                   $(tclDir)license.terms;
+-                                   $(tkDir)license.terms;
+-                                   $(tixDir)license.terms" />
++                                   $(tcltkDir)tcllicense.terms;
++                                   $(tcltkDir)tklicense.terms;
++                                   $(tcltkDir)tixlicense.terms" />
+             <_LicenseFiles Include="@(LicenseFiles)">
+                 <Content>$([System.IO.File]::ReadAllText(%(FullPath)))</Content>
+             </_LicenseFiles>
+diff --git a/Tools/msi/tcltk/tcltk.wixproj b/Tools/msi/tcltk/tcltk.wixproj
+--- a/Tools/msi/tcltk/tcltk.wixproj
++++ b/Tools/msi/tcltk/tcltk.wixproj
+@@ -20,14 +20,6 @@
+         <WxlTemplate Include="*.wxl_template" />
+     </ItemGroup>
+     <ItemGroup>
+-        <InstallFiles Include="$(tcltkDir)bin\*.dll" Exclude="$(tcltkDir)bin\*g.dll">
+-            <SourceBase>$(tcltkDir)</SourceBase>
+-            <Source>!(bindpath.tcltk)</Source>
+-            <TargetBase>$(tcltkDir)bin</TargetBase>
+-            <Target_>DLLs\</Target_>
+-            <Group>tcltk_dlls</Group>
+-        </InstallFiles>
+-
+         <InstallFiles Include="$(tcltkDir)lib\**\*">
+             <SourceBase>$(tcltkDir)</SourceBase>
+             <Source>!(bindpath.tcltk)</Source>
+diff --git a/Tools/msi/tcltk/tcltk_d.wxs b/Tools/msi/tcltk/tcltk_d.wxs
+--- a/Tools/msi/tcltk/tcltk_d.wxs
++++ b/Tools/msi/tcltk/tcltk_d.wxs
+@@ -8,7 +8,6 @@
+         
+         <Feature Id="DebugBinaries" AllowAdvertise="no" Title="!(loc.Title_d)" Description="!(loc.Description_d)">
+             <ComponentGroupRef Id="tkinter_extension_d" />
+-            <ComponentGroupRef Id="tcltk_dlls_d" />
+         </Feature>
+     </Product>
+ </Wix>
+diff --git a/Tools/msi/tcltk/tcltk_files.wxs b/Tools/msi/tcltk/tcltk_files.wxs
+--- a/Tools/msi/tcltk/tcltk_files.wxs
++++ b/Tools/msi/tcltk/tcltk_files.wxs
+@@ -5,9 +5,17 @@
+             <Component Id="_tkinter.pyd" Directory="DLLs" Guid="*">
+                 <File Name="_tkinter.pyd" KeyPath="yes" />
+             </Component>
++        </ComponentGroup>
++        <ComponentGroup Id="tcltk_dlls">
+             <Component Id="_tkinter.lib" Directory="libs" Guid="*">
+                 <File Name="_tkinter.lib" KeyPath="yes" />
+             </Component>
++            <Component Id="tcl86t.dll" Directory="DLLs" Guid="*">
++                <File Name="tcl86t.dll" KeyPath="yes" />
++            </Component>
++            <Component Id="tk86t.dll" Directory="DLLs" Guid="*">
++                <File Name="tk86t.dll" KeyPath="yes" />
++            </Component>
+         </ComponentGroup>
+     </Fragment>
+     
