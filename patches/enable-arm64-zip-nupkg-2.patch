@@ -1,0 +1,66 @@
+diff --git a/PCbuild/python.props b/PCbuild/python.props
+--- a/PCbuild/python.props
++++ b/PCbuild/python.props
+@@ -95,6 +95,7 @@
+     
+     <!-- Full path of the resulting python.exe binary -->
+     <PythonExe Condition="'$(PythonExe)' == ''">$(BuildPath)python$(PyDebugExt).exe</PythonExe>
++    <Python64Exe Condition="'$(Python64Exe)' == ''">$(BuildPath64)python$(PyDebugExt).exe</Python64Exe>
+ 
+     <!-- Include Tkinter by default -->
+     <IncludeTkinter Condition="'$(IncludeTkinter)' == ''">true</IncludeTkinter>
+diff --git a/Tools/msi/buildrelease.bat b/Tools/msi/buildrelease.bat
+--- a/Tools/msi/buildrelease.bat
++++ b/Tools/msi/buildrelease.bat
+@@ -194,21 +194,13 @@ if defined BUILDMSI (
+ )
+ 
+ if defined BUILDZIP (
+-    if "%BUILD_PLAT%" EQU "ARM64" (
+-        echo Skipping embeddable ZIP generation for ARM64 platform
+-    ) else (
+-        %MSBUILD% "%D%make_zip.proj" /t:Build %BUILDOPTS% %CERTOPTS% /p:OutputPath="%BUILD%en-us"
+-        if errorlevel 1 exit /B %ERRORLEVEL%
+-    )
++    %MSBUILD% "%D%make_zip.proj" /t:Build %BUILDOPTS% %CERTOPTS% /p:OutputPath="%BUILD%en-us"
++    if errorlevel 1 exit /B %ERRORLEVEL%
+ )
+ 
+ if defined BUILDNUGET (
+-    if "%BUILD_PLAT%" EQU "ARM64" (
+-        echo Skipping Nuget package generation for ARM64 platform
+-    ) else (
+-        %MSBUILD% "%D%..\nuget\make_pkg.proj" /t:Build /p:Configuration=Release /p:Platform=%1 /p:OutputPath="%BUILD%en-us"
+-        if errorlevel 1 exit /B %ERRORLEVEL%
+-    )
++    %MSBUILD% "%D%..\nuget\make_pkg.proj" /t:Build /p:Configuration=Release /p:Platform=%1 /p:OutputPath="%BUILD%en-us"
++    if errorlevel 1 exit /B %ERRORLEVEL%
+ )
+ 
+ if not "%OUTDIR%" EQU "" (
+diff --git a/Tools/msi/make_zip.proj b/Tools/msi/make_zip.proj
+--- a/Tools/msi/make_zip.proj
++++ b/Tools/msi/make_zip.proj
+@@ -15,7 +15,8 @@
+         <TargetExt>.zip</TargetExt>
+         <TargetPath>$(OutputPath)\$(TargetName)$(TargetExt)</TargetPath>
+         <CleanCommand>rmdir /q/s "$(IntermediateOutputPath)\zip_$(ArchName)"</CleanCommand>
+-        <Arguments>"$(PythonExe)" "$(PySourcePath)PC\layout"</Arguments>
++        <Arguments Condition="'$(ArchName)' != 'arm64'">"$(PythonExe)" "$(PySourcePath)PC\layout"</Arguments>
++        <Arguments Condition="'$(ArchName)' == 'arm64'">"$(Python64Exe)" "$(PySourcePath)PC\layout" --arch arm64</Arguments>
+         <Arguments>$(Arguments) -b "$(BuildPath.TrimEnd(`\`))" -s "$(PySourcePath.TrimEnd(`\`))"</Arguments>
+         <Arguments>$(Arguments) -t "$(IntermediateOutputPath)\zip_$(ArchName)"</Arguments>
+         <Arguments>$(Arguments) --zip "$(TargetPath)"</Arguments>
+diff --git a/Tools/nuget/make_pkg.proj b/Tools/nuget/make_pkg.proj
+--- a/Tools/nuget/make_pkg.proj
++++ b/Tools/nuget/make_pkg.proj
+@@ -25,7 +25,8 @@
+         
+         <CleanCommand>rmdir /q/s "$(IntermediateOutputPath.TrimEnd(`\`))"</CleanCommand>
+         
+-        <PythonArguments>"$(PythonExe)" "$(PySourcePath)PC\layout"</PythonArguments>
++        <PythonArguments Condition="'$(ArchName)' != 'arm64'">"$(PythonExe)" "$(PySourcePath)PC\layout"</PythonArguments>
++        <PythonArguments Condition="'$(ArchName)' == 'arm64'">"$(Python64Exe)" "$(PySourcePath)PC\layout" --arch arm64</PythonArguments>
+         <PythonArguments>$(PythonArguments) -b "$(BuildPath.TrimEnd(`\`))" -s "$(PySourcePath.TrimEnd(`\`))"</PythonArguments>
+         <PythonArguments>$(PythonArguments) -t "$(IntermediateOutputPath)obj"</PythonArguments>
+         <PythonArguments>$(PythonArguments) --copy "$(IntermediateOutputPath)pkg"</PythonArguments>
