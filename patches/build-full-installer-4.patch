@@ -24,7 +24,7 @@ index 6a2fb86..38cfcd1 100644
 -  <String Id="Include_symbolsLabel">Download debugging &amp;symbols</String>
 -  <String Id="Include_debugLabel">Download debu&amp;g binaries (requires VS 2017 or later)</String>
 +  <String Id="Include_symbolsLabel">Install debugging &amp;symbols</String>
-+  <String Id="Include_debugLabel">Install debu&amp;g binaries (requires VS 2017 or later)</String>
++  <String Id="Include_debugLabel">Install debu&amp;g binaries (requires VS 2022 or later)</String>
    
    <String Id="ProgressHeader">[ActionLikeInstallation] Progress</String>
    <String Id="ProgressLabel">[ActionLikeInstalling]:</String>
