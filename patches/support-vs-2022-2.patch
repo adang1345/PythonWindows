@@ -198,3 +198,27 @@ diff --git a/Tools/msi/exe/exe_files.wxs b/Tools/msi/exe/exe_files.wxs
              </Component>
          </ComponentGroup>
      </Fragment>
+diff --git a/Tools/msi/make_zip.proj b/Tools/msi/make_zip.proj
+--- a/Tools/msi/make_zip.proj
++++ b/Tools/msi/make_zip.proj
+@@ -18,7 +18,7 @@
+         <Arguments>"$(PythonExe)" "$(MSBuildThisFileDirectory)\make_zip.py"</Arguments>
+         <Arguments>$(Arguments) -e -o "$(TargetPath)" -t "$(IntermediateOutputPath)\zip_$(ArchName)" -b "$(BuildPath.TrimEnd('\'))"</Arguments>
+         <Environment>set DOC_FILENAME=python$(PythonVersion).chm</Environment>
+-        <Environment Condition="Exists($(CRTRedist))">$(Environment)%0D%0Aset VCREDIST_PATH=$(CRTRedist)\$(Platform)</Environment>
++        <Environment>$(Environment)%0D%0Aset VCREDIST_PATH=$(BuildPath.TrimEnd('\'))</Environment>
+     </PropertyGroup>
+ 
+     <Target Name="_Build">
+diff --git a/Tools/nuget/make_pkg.proj b/Tools/nuget/make_pkg.proj
+--- a/Tools/nuget/make_pkg.proj
++++ b/Tools/nuget/make_pkg.proj
+@@ -35,7 +35,7 @@
+         <NugetArguments>$(NugetArguments) -NoPackageAnalysis -NonInteractive</NugetArguments>
+         
+         <Environment>set DOC_FILENAME=python$(PythonVersion).chm</Environment>
+-        <Environment Condition="Exists($(CRTRedist))">$(Environment)%0D%0Aset VCREDIST_PATH=$(CRTRedist)\$(Platform)</Environment>
++        <Environment>$(Environment)%0D%0Aset VCREDIST_PATH=$(BuildPath.TrimEnd('\'))</Environment>
+     </PropertyGroup>
+ 
+     <Target Name="_NugetMissing" BeforeTargets="_Build" Condition="!Exists($(Nuget))">
