@@ -2,6 +2,19 @@
 
 For older Python versions in the *security* maintenance status, https://www.python.org/ officially releases only the source code and no installers. But what if you want an easy way to install these versions on Windows? Here, you can obtain unofficial Windows installers for security updates of Python 3.5 and higher.
 
+### Links to Latest Versions
+
+[3.12.15](https://github.com/adang1345/PythonWindows/releases/tag/v3.12.15) &nbsp;
+[3.11.17](https://github.com/adang1345/PythonWindows/releases/tag/v3.11.17) &nbsp;
+[3.10.22](https://github.com/adang1345/PythonWindows/releases/tag/v3.10.22) &nbsp;
+[3.9.25](https://github.com/adang1345/PythonWindows/releases/tag/v3.9.25) &nbsp;
+[3.8.20](https://github.com/adang1345/PythonWindows/releases/tag/v3.8.20) &nbsp;
+[3.7.17](https://github.com/adang1345/PythonWindows/releases/tag/v3.7.17) &nbsp;
+[3.6.15](https://github.com/adang1345/PythonWindows/releases/tag/v3.6.15) &nbsp;
+[3.5.10](https://github.com/adang1345/PythonWindows/releases/tag/v3.5.10)
+
+---
+
 For each Python version, this repository includes the following.
 
 - AMD64 executable installer (e.g. python-3.5.5-amd64-full.exe)
