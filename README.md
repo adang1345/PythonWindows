@@ -27,6 +27,9 @@ For each Python version, this repository includes the following.
 - AMD64 NuGet package (e.g. python.3.5.5.nupkg)
 - x86 NuGet package (e.g. pythonx86.3.5.5.nupkg)
 - ARM64 NuGet package (e.g. pythonarm64.3.11.10.nupkg) (since 3.11)
+- x86 free-threaded NuGet package (e.g. pythonx86-freethreaded.3.13.18.nupkg) (since 3.13)
+- AMD64 free-threaded NuGet package (e.g. python-freethreaded.3.13.18.nupkg) (since 3.13)
+- ARM64 free-threaded NuGet package (e.g. pythonarm64-freethreaded.3.13.18.nupkg) (since 3.13)
 - Windows help file (e.g. python355.chm) (3.5 to 3.10 only)
 
 These installers were built from the source distributions published at https://www.python.org/downloads/source/, patched to fix some bugs in the build scripts and to include all components to allow for a fully-offline installation. For the more technical among you, see [Notes.md](Notes.md) for further information about how I built the installers and how you may build them yourself.
