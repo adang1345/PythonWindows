@@ -1,3 +1,7 @@
+## 26 October 2026
+
+- Add 3.11.18, 3.12.16, and 3.13.18.
+
 ## 1 October 2026
 
 - Move all release artifacts to GitHub Releases. Keeping them in the repository is getting too unwieldy.

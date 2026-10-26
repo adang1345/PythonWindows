@@ -72,8 +72,8 @@
 
 ## Python 3.11
 
-- Create a Python 3.10 venv and set `PYTHON` to the location of the Python executable.
-- Apply `support-vs-2026-8.patch` to support building with Visual Studio 2026 using the v145 toolset (derived from https://github.com/python/cpython/commit/c06f4f43015528db45bd6b44b46c057d88b38583).
+- Create a Python 3.10 venv and set `PYTHON` to the location of the Python executable. If building multiple versions in succession, create a fresh new venv with 3.11.10 and 3.11.12.
+- Apply `support-vs-2026-8.patch` for 3.11.10-3.11.17 or `support-vs-2026-9.patch` for 3.11.18 or higher to support building with Visual Studio 2026 using the v145 toolset (derived from https://github.com/python/cpython/commit/c06f4f43015528db45bd6b44b46c057d88b38583).
 - Apply `build-full-installer-5.patch` to include debug symbols, debug binaries, and the Universal CRT in the installer.
 - Apply `enable-arm64-1.patch` to enable ARM64 builds. This also fixes https://github.com/python/cpython/issues/123915 and https://github.com/python/cpython/issues/150400.
 - Apply `fix-ucrt-2.patch` to fix error installing Universal C Runtime (https://github.com/python/cpython/issues/138896).
@@ -86,4 +86,12 @@
 - Apply `build-full-installer-5.patch` to include debug symbols, debug binaries, and the Universal CRT in the installer.
 - Apply `enable-arm64-2.patch` to enable ARM64 builds. This also fixes https://github.com/python/cpython/issues/150400.
 - Apply `fix-ucrt-2.patch` to fix error installing Universal C Runtime (https://github.com/python/cpython/issues/138896).
+- Run `buildrelease.bat`.
+
+## Python 3.13
+
+- Create a Python 3.12 venv and set `PYTHON` to the location of the Python executable.
+- Apply `support-vs-2026-9.patch` to support building with Visual Studio 2026 using the v145 toolset (derived from https://github.com/python/cpython/commit/c06f4f43015528db45bd6b44b46c057d88b38583).
+- Apply `build-full-installer-6.patch` to include debug symbols, debug binaries, the Universal CRT, and the experimental free-threaded build in the installer.
+- Apply `enable-arm64-3.patch` to enable ARM64 builds. This also fixes https://github.com/python/cpython/issues/150400.
 - Run `buildrelease.bat`.

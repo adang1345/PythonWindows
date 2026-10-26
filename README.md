@@ -4,8 +4,9 @@ For older Python versions in the *security* maintenance status, https://www.pyth
 
 ### Links to Latest Versions
 
-[3.12.15](https://github.com/adang1345/PythonWindows/releases/tag/v3.12.15) &nbsp;
-[3.11.17](https://github.com/adang1345/PythonWindows/releases/tag/v3.11.17) &nbsp;
+[3.13.18](https://github.com/adang1345/PythonWindows/releases/tag/v3.13.18) &nbsp;
+[3.12.16](https://github.com/adang1345/PythonWindows/releases/tag/v3.12.16) &nbsp;
+[3.11.18](https://github.com/adang1345/PythonWindows/releases/tag/v3.11.18) &nbsp;
 [3.10.22](https://github.com/adang1345/PythonWindows/releases/tag/v3.10.22) &nbsp;
 [3.9.25](https://github.com/adang1345/PythonWindows/releases/tag/v3.9.25) &nbsp;
 [3.8.20](https://github.com/adang1345/PythonWindows/releases/tag/v3.8.20) &nbsp;
